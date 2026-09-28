@@ -1,0 +1,743 @@
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+import subprocess
+import os
+
+
+class DuplicateDetectorGUI:
+
+    def __init__(self, root):
+        self.root = root
+
+        self.root.title("Duplicate File Detector")
+        self.root.geometry("1000x700")
+        self.root.minsize(850, 600)
+
+        self.root.configure(bg="#f4f1f8")
+
+        self.directory = ""
+
+        self.create_styles()
+        self.create_header()
+        self.create_scan_section()
+        self.create_statistics()
+        self.create_results_section()
+        self.create_footer()
+
+    # --------------------------------------------------
+    # STYLES
+    # --------------------------------------------------
+
+    def create_styles(self):
+
+        style = ttk.Style()
+
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        style.configure(
+            "Treeview",
+            background="#ffffff",
+            foreground="#333333",
+            rowheight=32,
+            fieldbackground="#ffffff",
+            font=("Arial", 10)
+        )
+
+        style.configure(
+            "Treeview.Heading",
+            font=("Arial", 10, "bold")
+        )
+
+        style.configure(
+            "Scan.TButton",
+            font=("Arial", 11, "bold"),
+            padding=10
+        )
+
+    # --------------------------------------------------
+    # HEADER
+    # --------------------------------------------------
+
+    def create_header(self):
+
+        header = tk.Frame(
+            self.root,
+            bg="#6c5b7b",
+            height=90
+        )
+
+        header.pack(fill="x")
+        header.pack_propagate(False)
+
+        title = tk.Label(
+            header,
+            text="Duplicate File Detector",
+            bg="#6c5b7b",
+            fg="white",
+            font=("Arial", 24, "bold")
+        )
+
+        title.pack(
+            side="left",
+            padx=30,
+            pady=20
+        )
+
+        subtitle = tk.Label(
+            header,
+            text="Linux File System Analysis",
+            bg="#6c5b7b",
+            fg="#eee8f4",
+            font=("Arial", 10)
+        )
+
+        subtitle.pack(
+            side="right",
+            padx=30
+        )
+
+    # --------------------------------------------------
+    # SCAN SECTION
+    # --------------------------------------------------
+
+    def create_scan_section(self):
+
+        frame = tk.Frame(
+            self.root,
+            bg="#f4f1f8"
+        )
+
+        frame.pack(
+            fill="x",
+            padx=30,
+            pady=20
+        )
+
+        label = tk.Label(
+            frame,
+            text="Scan Location",
+            bg="#f4f1f8",
+            fg="#333333",
+            font=("Arial", 11, "bold")
+        )
+
+        label.pack(
+            anchor="w",
+            pady=(0, 6)
+        )
+
+        path_frame = tk.Frame(
+            frame,
+            bg="#f4f1f8"
+        )
+
+        path_frame.pack(fill="x")
+
+        self.path_entry = tk.Entry(
+            path_frame,
+            font=("Arial", 11),
+            relief="solid",
+            bd=1
+        )
+
+        self.path_entry.pack(
+            side="left",
+            fill="x",
+            expand=True,
+            ipady=8
+        )
+
+        browse_button = tk.Button(
+            path_frame,
+            text="Browse",
+            command=self.browse_directory,
+            bg="#d9c8e8",
+            fg="#333333",
+            font=("Arial", 10, "bold"),
+            relief="flat",
+            padx=20,
+            pady=8,
+            cursor="hand2"
+        )
+
+        browse_button.pack(
+            side="left",
+            padx=(10, 0)
+        )
+
+        self.scan_button = tk.Button(
+            frame,
+            text="SCAN NOW",
+            command=self.scan,
+            bg="#6c5b7b",
+            fg="white",
+            font=("Arial", 11, "bold"),
+            relief="flat",
+            padx=30,
+            pady=10,
+            cursor="hand2"
+        )
+
+        self.scan_button.pack(
+            pady=15
+        )
+
+        self.status_label = tk.Label(
+            frame,
+            text="Ready to scan",
+            bg="#f4f1f8",
+            fg="#777777",
+            font=("Arial", 9)
+        )
+
+        self.status_label.pack()
+
+    # --------------------------------------------------
+    # STATISTICS
+    # --------------------------------------------------
+
+    def create_statistics(self):
+
+        frame = tk.Frame(
+            self.root,
+            bg="#f4f1f8"
+        )
+
+        frame.pack(
+            fill="x",
+            padx=30,
+            pady=5
+        )
+
+        self.files_value = self.create_stat_card(
+            frame,
+            "Files Scanned",
+            "0"
+        )
+
+        self.groups_value = self.create_stat_card(
+            frame,
+            "Duplicate Groups",
+            "0"
+        )
+
+        self.duplicates_value = self.create_stat_card(
+            frame,
+            "Duplicate Files",
+            "0"
+        )
+
+        self.savings_value = self.create_stat_card(
+            frame,
+            "Recoverable Space",
+            "0 B"
+        )
+
+    def create_stat_card(self, parent, title, value):
+
+        card = tk.Frame(
+            parent,
+            bg="white",
+            bd=1,
+            relief="solid"
+        )
+
+        card.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=5
+        )
+
+        title_label = tk.Label(
+            card,
+            text=title,
+            bg="white",
+            fg="#777777",
+            font=("Arial", 9)
+        )
+
+        title_label.pack(
+            pady=(12, 2)
+        )
+
+        value_label = tk.Label(
+            card,
+            text=value,
+            bg="white",
+            fg="#6c5b7b",
+            font=("Arial", 20, "bold")
+        )
+
+        value_label.pack(
+            pady=(0, 12)
+        )
+
+        return value_label
+
+    # --------------------------------------------------
+    # RESULTS
+    # --------------------------------------------------
+
+    def create_results_section(self):
+
+        frame = tk.Frame(
+            self.root,
+            bg="#f4f1f8"
+        )
+
+        frame.pack(
+            fill="both",
+            expand=True,
+            padx=30,
+            pady=20
+        )
+
+        label = tk.Label(
+            frame,
+            text="Duplicate Files",
+            bg="#f4f1f8",
+            fg="#333333",
+            font=("Arial", 13, "bold")
+        )
+
+        label.pack(
+            anchor="w",
+            pady=(0, 8)
+        )
+
+        tree_frame = tk.Frame(
+            frame,
+            bg="white"
+        )
+
+        tree_frame.pack(
+            fill="both",
+            expand=True
+        )
+
+        columns = (
+            "group",
+            "file",
+            "size"
+        )
+
+        self.tree = ttk.Treeview(
+            tree_frame,
+            columns=columns,
+            show="headings"
+        )
+
+        self.tree.heading(
+            "group",
+            text="Group"
+        )
+
+        self.tree.heading(
+            "file",
+            text="File Path"
+        )
+
+        self.tree.heading(
+            "size",
+            text="Size"
+        )
+
+        self.tree.column(
+            "group",
+            width=80,
+            anchor="center"
+        )
+
+        self.tree.column(
+            "file",
+            width=650
+        )
+
+        self.tree.column(
+            "size",
+            width=120,
+            anchor="center"
+        )
+
+        scrollbar = ttk.Scrollbar(
+            tree_frame,
+            orient="vertical",
+            command=self.tree.yview
+        )
+
+        self.tree.configure(
+            yscrollcommand=scrollbar.set
+        )
+
+        self.tree.pack(
+            side="left",
+            fill="both",
+            expand=True
+        )
+
+        scrollbar.pack(
+            side="right",
+            fill="y"
+        )
+
+    # --------------------------------------------------
+    # FOOTER
+    # --------------------------------------------------
+
+    def create_footer(self):
+
+        frame = tk.Frame(
+            self.root,
+            bg="#f4f1f8"
+        )
+
+        frame.pack(
+            fill="x",
+            padx=30,
+            pady=(0, 20)
+        )
+
+        export_button = tk.Button(
+            frame,
+            text="Export Report",
+            command=self.export_report,
+            bg="#d9c8e8",
+            fg="#333333",
+            font=("Arial", 10, "bold"),
+            relief="flat",
+            padx=20,
+            pady=8,
+            cursor="hand2"
+        )
+
+        export_button.pack(
+            side="right"
+        )
+
+    # --------------------------------------------------
+    # BROWSE
+    # --------------------------------------------------
+
+    def browse_directory(self):
+
+        directory = filedialog.askdirectory(
+            title="Select directory to scan"
+        )
+
+        if directory:
+
+            self.directory = directory
+
+            self.path_entry.delete(
+                0,
+                tk.END
+            )
+
+            self.path_entry.insert(
+                0,
+                directory
+            )
+
+    # --------------------------------------------------
+    # SCAN
+    # --------------------------------------------------
+
+    def scan(self):
+
+        directory = self.path_entry.get().strip()
+
+        if not directory:
+
+            messagebox.showwarning(
+                "No Directory",
+                "Please select a directory first."
+            )
+
+            return
+
+        if not os.path.isdir(directory):
+
+            messagebox.showerror(
+                "Invalid Directory",
+                "The selected path is not a valid directory."
+            )
+
+            return
+
+        self.scan_button.config(
+            state="disabled"
+        )
+
+        self.status_label.config(
+            text="Scanning..."
+        )
+
+        self.root.update_idletasks()
+
+        try:
+
+            result = subprocess.run(
+                [
+                    "./duplicate_detector",
+                    directory
+                ],
+                capture_output=True,
+                text=True,
+                cwd=os.path.dirname(
+                    os.path.abspath(__file__)
+                )
+            )
+
+            if result.returncode != 0:
+
+                messagebox.showerror(
+                    "Scan Error",
+                    result.stderr
+                )
+
+                return
+
+            self.read_results()
+
+            self.status_label.config(
+                text="Scan completed successfully"
+            )
+
+        except Exception as error:
+
+            messagebox.showerror(
+                "Error",
+                str(error)
+            )
+
+        finally:
+
+            self.scan_button.config(
+                state="normal"
+            )
+
+    # --------------------------------------------------
+    # READ RESULTS
+    # --------------------------------------------------
+
+    def read_results(self):
+
+        result_file = os.path.join(
+            os.path.dirname(
+                os.path.abspath(__file__)
+            ),
+            "results.txt"
+        )
+
+        if not os.path.exists(result_file):
+
+            messagebox.showerror(
+                "Error",
+                "results.txt was not created."
+            )
+
+            return
+
+        with open(
+            result_file,
+            "r"
+        ) as file:
+
+            lines = file.readlines()
+
+        files_scanned = 0
+        groups = 0
+        duplicate_files = 0
+        savings = 0
+
+        current_group = 0
+        current_size = "0 B"
+
+        self.tree.delete(
+            *self.tree.get_children()
+        )
+
+        for line in lines:
+
+            line = line.strip()
+
+            if line.startswith(
+                "FILES_SCANNED="
+            ):
+
+                files_scanned = int(
+                    line.split("=")[1]
+                )
+
+            elif line.startswith(
+                "DUPLICATE_GROUPS="
+            ):
+
+                groups = int(
+                    line.split("=")[1]
+                )
+
+            elif line.startswith(
+                "DUPLICATE_FILES="
+            ):
+
+                duplicate_files = int(
+                    line.split("=")[1]
+                )
+
+            elif line.startswith(
+                "POTENTIAL_SAVINGS="
+            ):
+
+                savings = int(
+                    line.split("=")[1]
+                )
+
+            elif line == "GROUP":
+
+                current_group += 1
+
+            elif line.startswith(
+                "SIZE_HUMAN="
+            ):
+
+                current_size = line.split(
+                    "=",
+                    1
+                )[1]
+
+            elif line.startswith(
+                "FILE="
+            ):
+
+                path = line.split(
+                    "=",
+                    1
+                )[1]
+
+                self.tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        current_group,
+                        path,
+                        current_size
+                    )
+                )
+
+        self.files_value.config(
+            text=str(files_scanned)
+        )
+
+        self.groups_value.config(
+            text=str(groups)
+        )
+
+        self.duplicates_value.config(
+            text=str(duplicate_files)
+        )
+
+        self.savings_value.config(
+            text=self.format_size(savings)
+        )
+
+    # --------------------------------------------------
+    # FORMAT SIZE
+    # --------------------------------------------------
+
+    def format_size(self, size):
+
+        if size >= 1024 * 1024 * 1024:
+
+            return f"{size / (1024 * 1024 * 1024):.2f} GB"
+
+        elif size >= 1024 * 1024:
+
+            return f"{size / (1024 * 1024):.2f} MB"
+
+        elif size >= 1024:
+
+            return f"{size / 1024:.2f} KB"
+
+        else:
+
+            return f"{size} B"
+
+    # --------------------------------------------------
+    # EXPORT REPORT
+    # --------------------------------------------------
+
+    def export_report(self):
+
+        result_file = os.path.join(
+            os.path.dirname(
+                os.path.abspath(__file__)
+            ),
+            "results.txt"
+        )
+
+        if not os.path.exists(result_file):
+
+            messagebox.showwarning(
+                "No Results",
+                "Run a scan before exporting a report."
+            )
+
+            return
+
+        destination = filedialog.asksaveasfilename(
+            title="Save Report",
+            defaultextension=".txt",
+            filetypes=[
+                ("Text files", "*.txt"),
+                ("All files", "*.*")
+            ]
+        )
+
+        if destination:
+
+            with open(
+                result_file,
+                "r"
+            ) as source:
+
+                contents = source.read()
+
+            with open(
+                destination,
+                "w"
+            ) as output:
+
+                output.write(
+                    "DUPLICATE FILE DETECTOR REPORT\n"
+                )
+
+                output.write(
+                    "====================================\n\n"
+                )
+
+                output.write(contents)
+
+            messagebox.showinfo(
+                "Report Exported",
+                "Report saved successfully."
+            )
+
+
+# ------------------------------------------------------
+# PROGRAM START
+# ------------------------------------------------------
+
+if __name__ == "__main__":
+
+    root = tk.Tk()
+
+    app = DuplicateDetectorGUI(
+        root
+    )
+
+    root.mainloop()

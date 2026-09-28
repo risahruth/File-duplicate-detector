@@ -1,0 +1,29 @@
+DUPLICATE FILE DETECTOR REPORT
+====================================
+
+DUPLICATE_FILE_DETECTOR
+FILES_SCANNED=65
+
+GROUP
+SIZE=41
+SIZE_HUMAN=41 B
+FILE=/home/risah/osproject/main
+FILE=/home/risah/osproject/.git/refs/remotes/origin/main
+
+GROUP
+SIZE=38
+SIZE_HUMAN=38 B
+FILE=/home/risah/osproject/testdata/file1.txt
+FILE=/home/risah/osproject/testdata/folder1/copy.txt
+FILE=/home/risah/osproject/testdata/file2.txt
+
+GROUP
+SIZE=38
+SIZE_HUMAN=38 B
+FILE=/home/risah/osproject/testdata/folder1/copy.txt
+FILE=/home/risah/osproject/testdata/file2.txt
+
+SUMMARY
+DUPLICATE_GROUPS=3
+DUPLICATE_FILES=7
+POTENTIAL_SAVINGS=155

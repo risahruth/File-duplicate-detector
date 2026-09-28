@@ -1,19 +1,5 @@
-/*
- * Duplicate File Detector using OS System Calls
- *
- * Operating Systems Project
- *
- * Features:
- * 1. Recursively scans a directory
- * 2. Finds regular files
- * 3. Compares file sizes
- * 4. Calculates a hash using file contents
- * 5. Reports duplicate files
- *
- * System calls / POSIX functions used:
- * open(), read(), close(), stat(), opendir(), readdir(), closedir()
- */
 #define _POSIX_C_SOURCE 200809L
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,11 +8,13 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <limits.h>
-#include <errno.h>
 
 #define BUFFER_SIZE 4096
 
-/* Structure to store information about each file */
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
 typedef struct
 {
     char path[PATH_MAX];
@@ -34,14 +22,13 @@ typedef struct
     unsigned long hash;
 } FileInfo;
 
-/* Dynamic array of files */
 FileInfo *files = NULL;
 size_t file_count = 0;
 size_t file_capacity = 0;
 
+
 /*
- * Simple FNV-1a hash.
- * This is used only to identify possible duplicate files.
+ * Calculate FNV-1a hash using open(), read() and close().
  */
 unsigned long calculate_hash(const char *filepath)
 {
@@ -55,7 +42,6 @@ unsigned long calculate_hash(const char *filepath)
 
     if (fd == -1)
     {
-        perror("open");
         return 0;
     }
 
@@ -68,20 +54,19 @@ unsigned long calculate_hash(const char *filepath)
         }
     }
 
+    close(fd);
+
     if (bytes_read == -1)
     {
-        perror("read");
-        close(fd);
         return 0;
     }
-
-    close(fd);
 
     return hash;
 }
 
+
 /*
- * Add a file to the dynamic array.
+ * Add file information to dynamic array.
  */
 void add_file(const char *path, off_t size, unsigned long hash)
 {
@@ -90,7 +75,7 @@ void add_file(const char *path, off_t size, unsigned long hash)
         size_t new_capacity;
 
         if (file_capacity == 0)
-            new_capacity = 10;
+            new_capacity = 50;
         else
             new_capacity = file_capacity * 2;
 
@@ -118,8 +103,9 @@ void add_file(const char *path, off_t size, unsigned long hash)
     file_count++;
 }
 
+
 /*
- * Recursively scan a directory.
+ * Recursively scan directories.
  */
 void scan_directory(const char *directory)
 {
@@ -139,16 +125,12 @@ void scan_directory(const char *directory)
         char path[PATH_MAX];
         struct stat file_stat;
 
-        /* Ignore . and .. */
         if (strcmp(entry->d_name, ".") == 0 ||
             strcmp(entry->d_name, "..") == 0)
         {
             continue;
         }
 
-        /*
-         * Construct complete path.
-         */
         int result = snprintf(
             path,
             sizeof(path),
@@ -159,45 +141,31 @@ void scan_directory(const char *directory)
 
         if (result < 0 || result >= (int)sizeof(path))
         {
-            fprintf(stderr, "Path too long: %s\n", entry->d_name);
             continue;
         }
 
-        /*
-         * Get file information using stat().
-         */
         if (stat(path, &file_stat) == -1)
         {
-            perror(path);
             continue;
         }
 
-        /*
-         * If directory, recursively scan it.
-         */
         if (S_ISDIR(file_stat.st_mode))
         {
             scan_directory(path);
         }
-
-        /*
-         * If regular file, process it.
-         */
         else if (S_ISREG(file_stat.st_mode))
         {
             unsigned long hash;
 
-            printf("Scanning: %s\n", path);
-
-            /*
-             * First check the file size.
-             * Then calculate the hash.
-             */
             hash = calculate_hash(path);
 
             if (hash != 0)
             {
-                add_file(path, file_stat.st_size, hash);
+                add_file(
+                    path,
+                    file_stat.st_size,
+                    hash
+                );
             }
         }
     }
@@ -205,52 +173,189 @@ void scan_directory(const char *directory)
     closedir(dir);
 }
 
-/*
- * Display duplicate files.
- */
-void find_duplicates(void)
-{
-    int found = 0;
 
-    printf("\n========================================\n");
-    printf("           DUPLICATE FILES\n");
-    printf("========================================\n");
+/*
+ * Convert bytes into a human-readable size.
+ */
+void format_size(off_t bytes, char *output, size_t output_size)
+{
+    double size = (double)bytes;
+
+    if (size >= 1024 * 1024 * 1024)
+    {
+        snprintf(
+            output,
+            output_size,
+            "%.2f GB",
+            size / (1024 * 1024 * 1024)
+        );
+    }
+    else if (size >= 1024 * 1024)
+    {
+        snprintf(
+            output,
+            output_size,
+            "%.2f MB",
+            size / (1024 * 1024)
+        );
+    }
+    else if (size >= 1024)
+    {
+        snprintf(
+            output,
+            output_size,
+            "%.2f KB",
+            size / 1024
+        );
+    }
+    else
+    {
+        snprintf(
+            output,
+            output_size,
+            "%ld B",
+            (long)bytes
+        );
+    }
+}
+
+
+/*
+ * Generate duplicate information.
+ *
+ * Results are written to results.txt so that the GUI can read them.
+ */
+void find_duplicates(const char *result_file)
+{
+    FILE *output;
+
+    size_t duplicate_groups = 0;
+    size_t duplicate_files = 0;
+    off_t potential_savings = 0;
+
+    output = fopen(result_file, "w");
+
+    if (output == NULL)
+    {
+        perror("fopen");
+        return;
+    }
+
+    fprintf(output, "DUPLICATE_FILE_DETECTOR\n");
+    fprintf(output, "FILES_SCANNED=%zu\n", file_count);
 
     for (size_t i = 0; i < file_count; i++)
     {
-        int duplicate_group = 0;
+        int group_found = 0;
 
         for (size_t j = i + 1; j < file_count; j++)
         {
-            /*
-             * Files are considered duplicates when:
-             *
-             * 1. Their sizes are equal
-             * 2. Their hashes are equal
-             */
             if (files[i].size == files[j].size &&
                 files[i].hash == files[j].hash)
             {
-                if (!duplicate_group)
+                if (!group_found)
                 {
-                    printf("\nDuplicate Group:\n");
-                    printf("  %s\n", files[i].path);
-                    duplicate_group = 1;
+                    char size_string[50];
+
+                    format_size(
+                        files[i].size,
+                        size_string,
+                        sizeof(size_string)
+                    );
+
+                    fprintf(
+                        output,
+                        "\nGROUP\n"
+                    );
+
+                    fprintf(
+                        output,
+                        "SIZE=%ld\n",
+                        (long)files[i].size
+                    );
+
+                    fprintf(
+                        output,
+                        "SIZE_HUMAN=%s\n",
+                        size_string
+                    );
+
+                    fprintf(
+                        output,
+                        "FILE=%s\n",
+                        files[i].path
+                    );
+
+                    group_found = 1;
+
+                    duplicate_groups++;
+                    duplicate_files++;
                 }
 
-                printf("  %s\n", files[j].path);
-                found = 1;
+                fprintf(
+                    output,
+                    "FILE=%s\n",
+                    files[j].path
+                );
+
+                duplicate_files++;
+
+                potential_savings += files[j].size;
             }
         }
     }
 
-    if (!found)
-    {
-        printf("\nNo duplicate files found.\n");
-    }
+    fprintf(
+        output,
+        "\nSUMMARY\n"
+    );
 
+    fprintf(
+        output,
+        "DUPLICATE_GROUPS=%zu\n",
+        duplicate_groups
+    );
+
+    fprintf(
+        output,
+        "DUPLICATE_FILES=%zu\n",
+        duplicate_files
+    );
+
+    fprintf(
+        output,
+        "POTENTIAL_SAVINGS=%ld\n",
+        (long)potential_savings
+    );
+
+    fclose(output);
+
+    /*
+     * Human-readable terminal summary.
+     */
     printf("\n========================================\n");
+    printf("       DUPLICATE FILE DETECTOR\n");
+    printf("========================================\n");
+
+    printf("Files scanned       : %zu\n", file_count);
+    printf("Duplicate groups    : %zu\n", duplicate_groups);
+    printf("Duplicate files     : %zu\n", duplicate_files);
+
+    char savings[50];
+
+    format_size(
+        potential_savings,
+        savings,
+        sizeof(savings)
+    );
+
+    printf("Potential space     : %s\n", savings);
+
+    printf("Results saved to    : %s\n", result_file);
+
+    printf("========================================\n");
 }
+
 
 /*
  * Free allocated memory.
@@ -260,36 +365,28 @@ void cleanup(void)
     free(files);
 }
 
+
 /*
  * Main function.
  */
 int main(int argc, char *argv[])
 {
+    const char *result_file = "results.txt";
+
     if (argc != 2)
     {
         printf("Usage: %s <directory>\n", argv[0]);
         printf("\nExample:\n");
-        printf("  %s ./testdata\n", argv[0]);
+        printf("  %s testdata\n", argv[0]);
+
         return EXIT_FAILURE;
     }
 
-    printf("========================================\n");
-    printf("      DUPLICATE FILE DETECTOR\n");
-    printf("========================================\n");
+    printf("Scanning directory: %s\n", argv[1]);
 
-    printf("\nDirectory: %s\n\n", argv[1]);
-
-    /*
-     * Start recursive scanning.
-     */
     scan_directory(argv[1]);
 
-    printf("\nTotal files scanned: %zu\n", file_count);
-
-    /*
-     * Compare files and display duplicates.
-     */
-    find_duplicates();
+    find_duplicates(result_file);
 
     cleanup();
 
